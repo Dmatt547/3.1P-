@@ -1,0 +1,67 @@
+// Include necessary libraries
+#include <WiFiNINA.h>
+#include "secrets.h"  // Secrets file for sensitive data
+#include <Wire.h>
+#include <BH1750.h>   // Include BH1750 library
+
+// WiFi and server details
+WiFiClient client;
+char ssid[] = SECRET_SSID;   
+char pass[] = SECRET_PASS;
+char HOST_NAME[] = "maker.ifttt.com";
+String eventPath = "/trigger/Sunlight_Exposure_High/with/key/bqY14CaPbtqG4UBpzuRdzQ"; // Your IFTTT event path
+
+// BH1750 Light Sensor
+BH1750 lightMeter(0x23); // Address of BH1750 if ADDR pin is connected to GND
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial); // Wait for the serial port to connect
+  WiFi.begin(ssid, pass); // Start the WiFi connection
+  
+  Wire.begin();  // Begin I2C
+  lightMeter.begin();  // Initialize BH1750
+
+  // Attempt to connect to the web server:
+  if (client.connect(HOST_NAME, 80)) {
+    Serial.println("Connected to server");
+  } else {
+    Serial.println("Connection failed");
+  }
+}
+
+void loop() {
+  float lux = lightMeter.readLightLevel(); // Read light level from BH1750 sensor
+  Serial.print("Light: ");
+  Serial.print(lux);
+  Serial.println(" lx");
+
+  delay(30000); // Delay to prevent spamming the server
+
+  // Check if the light level exceeds a certain threshold
+  if (lux > 100) { // Threshold of 100 lux, adjust as needed
+    if (client.connect(HOST_NAME, 80)) {
+      Serial.println("Connected to server");
+
+      // Send HTTP request to trigger the IFTTT event
+      client.println("GET " + eventPath + "?value1=" + String(lux) + "&value2=25 HTTP/1.1");
+      client.println("Host: " + String(HOST_NAME));
+      client.println("Connection: close");
+      client.println(); // End HTTP header
+
+      // Wait for the server response and read it
+      while (client.connected()) {
+        if (client.available()) {
+          char c = client.read();
+          Serial.print(c);
+        }
+      }
+
+      client.stop(); // Disconnect from the server
+      Serial.println("Disconnected");
+    } else {
+      Serial.println("Connection failed");
+    }
+  }
+}
+
